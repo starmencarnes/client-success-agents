@@ -15,6 +15,11 @@ jobs:
       run:
         working-directory: agents/asana-writers
 
+    env:
+      PIP_NO_CACHE_DIR: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PIP_ROOT_USER_ACTION: "ignore"
+
     steps:
       - uses: actions/checkout@v4
 
@@ -23,13 +28,17 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install deps
+      - name: Install deps (fresh, force correct OpenAI SDK)
         run: |
           python -m venv .venv
           source .venv/bin/activate
-          pip install --no-cache-dir -r requirements.txt
-          # quick one-liner check (no heredoc)
-          python -c 'import openai,sys; print("python:", sys.version); print("openai:", openai.__version__)'
+          python -m pip install --upgrade pip
+          # Install your repo deps first
+          pip install --no-cache-dir -r requirements.txt || true
+          # Hard-pin SDKs we rely on (force reinstall to avoid stale envs)
+          pip install --no-cache-dir --upgrade --force-reinstall "httpx<0.28" "openai>=1.51.0"
+          # Sanity print
+          python -c 'import sys, openai; from openai import OpenAI; c=OpenAI(); print("python:", sys.version); print("openai:", openai.__version__); print("Has responses?", hasattr(c, "responses"))'
 
       - name: Write service account key
         env:
@@ -51,7 +60,7 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ASANA_GOOGLE_SHEET_ID: ${{ secrets.ASANA_GOOGLE_SHEET_ID }}
           ANALYZE_JSONL_PATH: ${{ github.event.inputs.jsonl_path }}
-          OPENAI_MODEL: gpt-4o-mini
+          OPENAI_MODEL: gpt-4.1-mini     # or gpt-4o-mini / gpt-4.1
           WRITER_CAPACITY_JSON: |
             {"Dalton Phillips":1200,"Julia Pizzuto":1200,"Michaela Leung":1200,
              "Germaine Foo":1200,"Rachel Taylor-Northam":1200,"Lexa Garian":1200,"Bethany Osborn":1200}
