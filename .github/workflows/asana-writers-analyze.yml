@@ -32,10 +32,9 @@ jobs:
           pip install --no-cache-dir "httpx<0.28" "openai==1.40.2"
           python - <<'PY'
           import sys, openai
-          from openai import OpenAI
           print("python:", sys.version)
           print("openai version:", openai.__version__)
-          print("has Responses API:", hasattr(OpenAI(), "responses"))
+          # We do NOT instantiate OpenAI() here because no API key is set in this step.
           PY
 
       - name: Write service account key
@@ -68,10 +67,12 @@ jobs:
           RULES_JSON_PATH: agents/asana-writers/rules.json
         run: |
           source .venv/bin/activate
+          # Now that the API key is set, verify Responses API is available:
           python - <<'PY'
           import openai
           from openai import OpenAI
-          print("OpenAI SDK at runtime:", openai.__version__, "responses?", hasattr(OpenAI(), "responses"))
+          c = OpenAI()  # API key comes from env in this step
+          print("OpenAI SDK at runtime:", openai.__version__, "responses?", hasattr(c, "responses"))
           PY
           python analyze_workload.py
 
