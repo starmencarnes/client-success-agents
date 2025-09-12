@@ -27,6 +27,18 @@ def latest_jsonl(pattern="asana_writer_tasks_*.jsonl"):
         raise SystemExit("No JSONL files found (run the pull step once, or set ANALYZE_JSONL_PATH).")
     return files[-1]
 
+def jsonl_to_json_file(jsonl_path: str) -> str:
+    out_path = os.path.splitext(jsonl_path)[0] + "_upload.json"  # e.g., sample_upload.json
+    objs = []
+    with open(jsonl_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            objs.append(json.loads(line))
+    with open(out_path, "w", encoding="utf-8") as w:
+        json.dump(objs, w, ensure_ascii=False)
+    return out_path
 
 def open_sheet(sheet_id: str, tab_name: str):
     scopes = ["https://www.googleapis.com/auth/spreadsheets"]
@@ -50,9 +62,9 @@ def main():
 
     # 2) upload to Assistant and run
     client = OpenAI(api_key=OPENAI_API_KEY)
-
+    upload_path = jsonl_to_json_file(jsonl_path)
     file_obj = client.files.create(
-        file=open(jsonl_path, "rb"),
+        file=open(upload_path, "rb"),
         purpose="assistants"
     )
 
