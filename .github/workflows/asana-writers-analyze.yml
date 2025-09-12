@@ -1,0 +1,63 @@
+name: Asana Writers — Analyze Only
+
+on:
+  workflow_dispatch:
+    inputs:
+      jsonl_path:
+        description: "Optional path to a JSONL file (in repo) to analyze"
+        required: false
+        default: ""
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agents/asana-writers
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install -r requirements.txt
+          pip install openai==1.40.2
+
+      - name: Write service account key
+        if: ${{ secrets.SERVICE_ACCOUNT_JSON != '' }}
+        env:
+          SERVICE_ACCOUNT_JSON: ${{ secrets.SERVICE_ACCOUNT_JSON }}
+        run: |
+          printf '%s' "$SERVICE_ACCOUNT_JSON" > service_account.json
+
+      - name: Show candidate JSONL files (debug)
+        run: |
+          ls -la
+          ls -la *.jsonl || true
+          ls -la data || true
+          ls -la output || true
+
+      - name: Run analyzer
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_ASSISTANT_ID: ${{ secrets.OPENAI_ASSISTANT_ID }}
+          ASANA_GOOGLE_SHEET_ID: ${{ secrets.ASANA_GOOGLE_SHEET_ID }}
+          ANALYZE_JSONL_PATH: ${{ github.event.inputs.jsonl_path }}
+        run: |
+          source .venv/bin/activate
+          python analyze_workload.py
+
+      - name: Upload analysis artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: asana-writer-analysis
+          path: |
+            agents/asana-writers/assistant_output_*.txt
+            agents/asana-writers/writer_workload_summary_*.json
