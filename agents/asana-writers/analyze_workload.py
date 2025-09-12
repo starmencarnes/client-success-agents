@@ -5,10 +5,10 @@ import time
 import datetime as dt
 import glob
 import re
-
 import gspread
 from google.oauth2.service_account import Credentials
 from openai import OpenAI
+
 
 # -------- Config (shared sheet) --------
 SHEET_ID = os.getenv("ASANA_GOOGLE_SHEET_ID")
@@ -40,17 +40,57 @@ def latest_jsonl(pattern="asana_writer_tasks_*.jsonl") -> str:
         raise SystemExit("No JSONL files found (run the pull step once, or set ANALYZE_JSONL_PATH).")
     return files[-1]
 
+ACTION_RE  = re.compile(
+    r'\b('
+    r'writer|editor|editing|edit(?:ed|ing)?|draft(?:ed|ing)?|writing|write|compose|outline|'
+    r'publish(?:ed|ing)?|schedule(?:d)?|plan(?:ning)?|'
+    r'preview link|send to client|sent to press|feedback|integrat(?:e|ed)|build|create'
+    r')\b',
+    re.IGNORECASE
+)
+HUB_RE     = re.compile(r'\b(runs|posted)\b', re.IGNORECASE)
+EDITION_RE = re.compile(r'\|\s*[A-Z]{2,5}\s*$', re.IGNORECASE)
+
+def is_hub_container_task(t: dict) -> bool:
+    """Return True if this looks like a top-level 'hub' parent (container) task."""
+    try:
+        # Keep subtasks; they carry the real work.
+        if t.get("is_subtask") is True:
+            return False
+        name = (t.get("name") or "").strip()
+        if not name:
+            return False
+        # If it contains action words, it's not a container.
+        if ACTION_RE.search(name):
+            return False
+        # Heuristic: pipe-separated title with 'runs' or 'posted', often ends with an edition code like | RAL
+        if '|' in name and HUB_RE.search(name):
+            # Optional: ensure it looks like | EDITION at the end (RAL, WS, AVL, MKT, etc.)
+            if EDITION_RE.search(name) or True:
+                return True
+        return False
+    except Exception:
+        return False
+
 def jsonl_to_json_file(jsonl_path: str) -> str:
+    """Convert JSONL -> JSON array file that Assistants can ingest. Skips hub parents."""
     out_path = os.path.splitext(jsonl_path)[0] + "_upload.json"
-    objs = []
+    include_hub = (os.getenv("INCLUDE_HUB_PARENTS", "false").strip().lower() in ("1","true","yes","on"))
+    objs, kept, skipped = [], 0, 0
     with open(jsonl_path, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line:
                 continue
-            objs.append(json.loads(line))
+            task = json.loads(line)
+            if not include_hub and is_hub_container_task(task):
+                skipped += 1
+                continue
+            objs.append(task)
+            kept += 1
     with open(out_path, "w", encoding="utf-8") as w:
         json.dump(objs, w, ensure_ascii=False)
+    print(f"Prepared upload JSON with {kept} tasks (skipped {skipped} hub parents).")
     return out_path
 
 def open_sheet(sheet_id: str, tab_name: str):
