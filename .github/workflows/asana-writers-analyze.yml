@@ -26,16 +26,16 @@ jobs:
       - name: Install deps (force correct OpenAI SDK)
         run: |
           python -m venv .venv
-          source .venv/bin/activate
-          pip uninstall -y openai || true
-          pip install --no-cache-dir -r requirements.txt
-          pip install --no-cache-dir "httpx<0.28" "openai==1.40.2"
-          python - <<'PY'
-          import sys, openai
-          print("python:", sys.version)
-          print("openai version:", openai.__version__)
-          # We do NOT instantiate OpenAI() here because no API key is set in this step.
-          PY
+              source .venv/bin/activate
+              pip uninstall -y openai || true
+              pip install --no-cache-dir -r requirements.txt
+              pip install --no-cache-dir --upgrade --force-reinstall "httpx<0.28" "openai==1.51.0"
+              python - <<'PY'
+              import sys, openai
+              print("python:", sys.version)
+              print("openai version:", openai.__version__)
+              # don't instantiate OpenAI here (no API key yet)
+              PY
 
       - name: Write service account key
         env:
@@ -67,7 +67,6 @@ jobs:
           RULES_JSON_PATH: agents/asana-writers/rules.json
         run: |
           source .venv/bin/activate
-          # Now that the API key is set, verify Responses API is available:
           python - <<'PY'
           import openai
           from openai import OpenAI
