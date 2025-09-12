@@ -1,0 +1,49 @@
+name: Asana Writers Pull
+
+on:
+  workflow_dispatch:        # lets you click "Run workflow" in the Actions tab
+  schedule:
+    - cron: "0 21 * * 5"    # optional: Fridays 21:00 UTC (~4pm ET)
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agents/asana-writers
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install -r requirements.txt
+
+      - name: Write service account key
+        env:
+          SERVICE_ACCOUNT_JSON: ${{ secrets.SERVICE_ACCOUNT_JSON }}
+        run: |
+          cat > service_account.json <<'JSON'
+          $SERVICE_ACCOUNT_JSON
+          JSON
+
+      - name: Run pull
+        env:
+          ASANA_TOKEN: ${{ secrets.ASANA_TOKEN }}
+          ASANA_WORKSPACE_GID: ${{ secrets.ASANA_WORKSPACE_GID }}
+          GOOGLE_SHEET_ID: ${{ secrets.ASANA_GOOGLE_SHEET_ID }}
+        run: |
+          source .venv/bin/activate
+          python asana_pull.py
+
+      - name: Upload JSONL artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: asana-writer-jsonl
+          path: agents/asana-writers/*.jsonl
