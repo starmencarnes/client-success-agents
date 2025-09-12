@@ -73,6 +73,8 @@ def main():
 Analyze the attached file.
 Treat “Preview Link sent”, “send to client”, and “sent to press” as Publishing.
 If a task title includes both “story” and “lead story”, classify ad_type as Lead Story (not Instagram Story).
+Capacity (minutes/week): {{"Dalton Phillips": 1200, "Julia Pizzuto": 1200, "Michaela Leung": 1200, "Germaine Foo": 1200, "Rachel Taylor-Northam": 1200, "Lexa Garian": 1200, "Bethany Osborn": 1200}}
+Return JSON only, no markdown, no citations or bracketed sources, matching the exact schema in your System Instructions.
 """
 
     thread = client.beta.threads.create()
@@ -85,7 +87,8 @@ If a task title includes both “story” and “lead story”, classify ad_type
     run = client.beta.threads.runs.create(
         thread_id=thread.id,
         assistant_id=ASSISTANT_ID,
-        instructions=instructions
+        instructions=instructions,
+        response_format={"type": "json_object"}
     )
 
     # poll to completion
