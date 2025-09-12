@@ -173,10 +173,8 @@ def main():
 
     ws = open_sheet(SHEET_ID, SHEET_SUMMARY_TAB)
     ws.append_row([f"Narrative (generated {stamp} UTC)"])
-    # Split into ~500-char chunks so a single cell doesn't become unruly
-    MAX_CHUNK = 500
-    for i in range(0, len(narrative), MAX_CHUNK):
-        ws.append_row([narrative[i:i+MAX_CHUNK]])
+    ws.update("A2", [[narrative]])  # one cell, full text; line breaks preserved
+
 
     print("Wrote narrative to sheet and saved .txt. Ready for Slack paste.")
 
