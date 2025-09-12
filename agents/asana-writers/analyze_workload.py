@@ -8,6 +8,18 @@ import gspread
 from google.oauth2.service_account import Credentials
 from openai import OpenAI
 
+# quick sanity check (runs at import time)
+import sys
+print("python:", sys.version)
+import openai
+print("openai version:", openai.__version__)
+
+# instantiate client
+client = OpenAI()
+
+# confirm whether responses is available
+print("has .responses?", hasattr(client, "responses"))
+
 # ---------- Config ----------
 SHEET_ID = os.getenv("ASANA_GOOGLE_SHEET_ID")
 SHEET_SUMMARY_TAB = "asana_writers_summary"
