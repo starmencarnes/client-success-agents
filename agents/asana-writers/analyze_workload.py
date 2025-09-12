@@ -1,9 +1,11 @@
-# analyze_workload.py
+# analyze_workload.py – narrative-only flow for Slack + Sheet
 import os
 import json
 import time
 import datetime as dt
 import glob
+import re
+
 import gspread
 from google.oauth2.service_account import Credentials
 from openai import OpenAI
@@ -15,38 +17,31 @@ SA_PATH = "service_account.json"
 
 # -------- OpenAI --------
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-ASSISTANT_ID   = os.getenv("OPENAI_ASSISTANT_ID")  # pre-created Assistant
+ASSISTANT_ID   = os.getenv("OPENAI_ASSISTANT_ID")  # your pre-created Assistant
 
 # -------- helpers --------
-def resolve_path_candidates(path_str: str) -> list[str]:
-    """Return a few candidate absolute paths to try for ANALYZE_JSONL_PATH."""
+def resolve_path_candidates(path_str: str):
     paths = []
-    # as-is
-    paths.append(os.path.abspath(path_str))
-    # relative to CWD
-    paths.append(os.path.abspath(os.path.join(os.getcwd(), path_str)))
-    # relative to repo root (../../ from agents/asana-writers)
+    paths.append(os.path.abspath(path_str))  # as-is
+    paths.append(os.path.abspath(os.path.join(os.getcwd(), path_str)))  # relative to CWD
     repo_root = os.path.abspath(os.path.join(os.getcwd(), "..", ".."))
-    paths.append(os.path.abspath(os.path.join(repo_root, path_str.lstrip("/"))))
+    paths.append(os.path.abspath(os.path.join(repo_root, path_str.lstrip("/"))))  # repo root
     return paths
 
 def latest_jsonl(pattern="asana_writer_tasks_*.jsonl") -> str:
-    """Find a JSONL file to analyze. Allow ANALYZE_JSONL_PATH override."""
     override = (os.getenv("ANALYZE_JSONL_PATH") or "").strip()
     if override:
         for cand in resolve_path_candidates(override):
             if os.path.exists(cand):
                 return cand
-        raise SystemExit(f"ANALYZE_JSONL_PATH not found (tried variants): {resolve_path_candidates(override)}")
-
+        raise SystemExit(f"ANALYZE_JSONL_PATH not found (tried): {resolve_path_candidates(override)}")
     files = sorted(glob.glob(pattern))
     if not files:
         raise SystemExit("No JSONL files found (run the pull step once, or set ANALYZE_JSONL_PATH).")
     return files[-1]
 
 def jsonl_to_json_file(jsonl_path: str) -> str:
-    """Convert JSONL -> JSON array file that Assistants can ingest."""
-    out_path = os.path.splitext(jsonl_path)[0] + "_upload.json"  # e.g., sample_upload.json
+    out_path = os.path.splitext(jsonl_path)[0] + "_upload.json"
     objs = []
     with open(jsonl_path, "r", encoding="utf-8") as f:
         for line in f:
@@ -67,51 +62,64 @@ def open_sheet(sheet_id: str, tab_name: str):
         ws = sh.worksheet(tab_name)
         ws.clear()
     except gspread.WorksheetNotFound:
-        ws = sh.add_worksheet(title=tab_name, rows="500", cols="24")
+        ws = sh.add_worksheet(title=tab_name, rows="200", cols="2")
     return ws
+
+def clean_narrative(text: str) -> str:
+    """Strip code fences, citations like 【...】, and extra whitespace for Slack/Sheets."""
+    # remove triple-fenced code blocks
+    text = re.sub(r"^```[\s\S]*?```", "", text, flags=re.MULTILINE)
+    text = text.replace("```", "")
+    # remove bracketed citation-looking bits
+    text = re.sub(r"【[^】]*】", "", text)
+    # collapse overly long blank lines
+    text = re.sub(r"\n{3,}", "\n\n", text).strip()
+    return text
 
 # -------- main --------
 def main():
-    # sanity
     if not (OPENAI_API_KEY and ASSISTANT_ID and SHEET_ID):
         raise SystemExit("Missing OPENAI_API_KEY, OPENAI_ASSISTANT_ID or ASANA_GOOGLE_SHEET_ID.")
 
-    # 1) get latest JSONL
+    # 1) Pick the data file and convert for upload
     jsonl_path = latest_jsonl()
     print(f"Using file: {jsonl_path}")
-
-    # 2) upload to Assistant (convert to .json array first)
-    client = OpenAI(api_key=OPENAI_API_KEY)
     upload_path = jsonl_to_json_file(jsonl_path)
+
+    # 2) Create client + upload file for assistants
+    client = OpenAI(api_key=OPENAI_API_KEY)
     file_obj = client.files.create(file=open(upload_path, "rb"), purpose="assistants")
 
-    # 3) per-run instructions (System Instructions live in the Assistant)
-    per_run = """
-Analyze tasks due next week (Mon–Sun, America/New_York).
-Capacity (minutes/week): {"Dalton Phillips": 1200, "Julia Pizzuto": 1200, "Michaela Leung": 1200, "Germaine Foo": 1200, "Rachel Taylor-Northam": 1200, "Lexa Garian": 1200, "Bethany Osborn": 1200}
-Treat “Preview Link sent”, “send to client”, and “sent to press” as Publishing.
-Return ONE JSON object only (no markdown, no citations), matching the schema in your System Instructions.
-""".strip()
+    # 3) Per-run prompt: ask ONLY for a short, Slack-friendly narrative
+    per_run = (
+        "You will receive a JSON array of Asana tasks due next week. "
+        "Apply your System Instructions to classify and estimate effort. "
+        "Return a short Slack-ready memo (no code fences, no citations) with:\n"
+        "• Who is overloaded (by approx minutes) and why\n"
+        "• 3–6 concrete reassignments for the floating writer (task type + due day + from → to)\n"
+        "• Any risks or follow-ups\n"
+        "Keep it under ~12 lines, crisp and actionable."
+    )
 
-    # 4) create thread, attach file
+    # 4) Create thread + attach file
     thread = client.beta.threads.create()
     client.beta.threads.messages.create(
         thread_id=thread.id,
         role="user",
-        content="Analyze the attached task file.",
+        content="Analyze the attached tasks for next week and propose a support plan.",
         attachments=[{"file_id": file_obj.id, "tools": [{"type": "file_search"}]}],
     )
 
-    # 5) run with JSON-only response
+    # 5) Run (text output; do NOT force JSON)
     run = client.beta.threads.runs.create(
         thread_id=thread.id,
         assistant_id=ASSISTANT_ID,
         instructions=per_run,
-        response_format={"type": "json_object"},
+        # no response_format here — we want natural text
     )
 
-    # 6) poll to completion (with timeout)
-    deadline = time.time() + 300  # 5 minutes
+    # 6) Poll to completion (with timeout)
+    deadline = time.time() + 300  # 5 min
     while True:
         r = client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
         if r.status in ("completed", "failed", "cancelled", "expired"):
@@ -123,91 +131,37 @@ Return ONE JSON object only (no markdown, no citations), matching the schema in 
     if r.status != "completed":
         raise SystemExit(f"Assistant run did not complete (status={r.status})")
 
-    # 7) fetch assistant message and parse JSON strictly
+    # 7) Fetch the assistant's text message
     msgs = client.beta.threads.messages.list(thread_id=thread.id, order="desc", limit=10)
-    json_text = None
+    narrative = None
     for m in msgs.data:
         if m.role != "assistant":
             continue
         for c in m.content:
             if c.type == "text":
-                json_text = c.text.value.strip()
+                narrative = c.text.value.strip()
                 break
-        if json_text:
+        if narrative:
             break
 
-    if not json_text:
-        raise SystemExit("Assistant returned no text. Expected JSON (response_format=json_object).")
+    if not narrative:
+        raise SystemExit("Assistant returned no text.")
 
-    try:
-        json_obj = json.loads(json_text)
-    except Exception:
-        # save for debugging
-        stamp = dt.datetime.utcnow().strftime("%Y-%m-%dT%H-%M-%S")
-        with open(f"assistant_output_{stamp}.txt", "w", encoding="utf-8") as f:
-            f.write(json_text)
-        raise SystemExit(f"Assistant did not return valid JSON. Saved raw to assistant_output_{stamp}.txt")
+    narrative = clean_narrative(narrative)
 
-    # 8) basic schema guard
-    required_top = {"by_assignee", "ranking", "support_plan"}
-    missing = [k for k in required_top if k not in json_obj]
-    if missing:
-        raise SystemExit(f"Assistant JSON missing keys: {missing}")
+    # 8) Save narrative to file and to the Sheet
+    stamp = dt.datetime.utcnow().strftime("%Y-%m-%dT%H-%M-%S")
+    with open(f"assistant_narrative_{stamp}.txt", "w", encoding="utf-8") as f:
+        f.write(narrative)
 
-    # 9) write summary tables to the Sheet
     ws = open_sheet(SHEET_ID, SHEET_SUMMARY_TAB)
+    ws.append_row([f"Narrative (generated {stamp} UTC)"])
+    # Split into ~500-char chunks so a single cell doesn't become unruly
+    MAX_CHUNK = 500
+    for i in range(0, len(narrative), MAX_CHUNK):
+        ws.append_row([narrative[i:i+MAX_CHUNK]])
 
-    # header for per-assignee stats
-    ws.append_row([
-        "Assignee",
-        "Drafting Tasks","Publishing Tasks","Editing Tasks","Planning Tasks",
-        "Drafting Minutes","Publishing Minutes","Editing Minutes","Planning Minutes","Total Minutes",
-        "Article","Mini Article","Lead Story","Text Ad","Social Post","Instagram Story","Dedicated Email","Unclear",
-        "Capacity","Load Ratio","Deficit","Status",
-    ])
-
-    by = json_obj["by_assignee"]
-    for assignee, stats in by.items():
-        tc = stats.get("task_counts", {})
-        mm = stats.get("minutes", {})
-        ad = stats.get("by_ad_type", {})
-        row = [
-            assignee,
-            tc.get("Drafting", 0), tc.get("Publishing", 0), tc.get("Editing", 0), tc.get("Planning", 0),
-            mm.get("Drafting", 0), mm.get("Publishing", 0), mm.get("Editing", 0), mm.get("Planning", 0), mm.get("Total", 0),
-            ad.get("Article", 0), ad.get("Mini Article", 0), ad.get("Lead Story", 0), ad.get("Text Ad", 0),
-            ad.get("Social Post", 0), ad.get("Instagram Story", 0), ad.get("Dedicated Email", 0), ad.get("Unclear", 0),
-            stats.get("capacity_minutes", 0), stats.get("load_ratio", 0.0), stats.get("deficit_minutes", 0), stats.get("status", ""),
-        ]
-        ws.append_row(row)
-
-    # ranking table
-    ws.append_row([])
-    ws.append_row(["Ranking (highest deficit first)"])
-    ws.append_row(["#", "Assignee", "Total Minutes", "Capacity", "Deficit", "Load Ratio", "Status"])
-    for i, rnk in enumerate(json_obj.get("ranking", []), start=1):
-        ws.append_row([
-            i,
-            rnk.get("assignee", ""),
-            rnk.get("total_minutes", 0),
-            rnk.get("capacity_minutes", 0),
-            rnk.get("deficit_minutes", 0),
-            rnk.get("load_ratio", 0.0),
-            rnk.get("status", "")
-        ])
-
-    # support plan
-    ws.append_row([])
-    ws.append_row(["Support Plan (suggested rebalancing)"])
-    for line in json_obj.get("support_plan", []):
-        ws.append_row([line])
-
-    # audit save
-    stamp = dt.datetime.utcnow().strftime("%Y-%m-%d")
-    with open(f"writer_workload_summary_{stamp}.json", "w", encoding="utf-8") as f:
-        json.dump(json_obj, f, ensure_ascii=False, indent=2)
-
-    print(f"Wrote summary to sheet tab '{SHEET_SUMMARY_TAB}' and saved JSON.")
+    print("Wrote narrative to sheet and saved .txt. Ready for Slack paste.")
 
 if __name__ == "__main__":
     main()
