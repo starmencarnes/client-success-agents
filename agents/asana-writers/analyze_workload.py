@@ -70,31 +70,9 @@ def main():
 
     # prompt: ask for strict JSON plus a short narrative
     instructions = """
-You are a production editor’s assistant. The attached file is JSONL: one Asana task per line.
-For each task, classify:
-- category: Drafting | Publishing | Editing | Other (based ONLY on the subtask or parent tasks's own name/notes)
-- ad_type: Article | Mini Article | Lead Story | Text Ad | Social Post | Instagram Story | Dedicated Email | Unclear
-- effort_minutes: integer estimate (defaults: Article 90, Mini 45, Lead Story 120, Social 20, Text Ad 10, Dedicated Email 120; Editing 10-30; Publishing 10)
-
-Aggregate by assignee:
-- drafting_tasks, publishing_tasks, editing_tasks, drafting_minutes, publishing_minutes; editing_minutes; total minutes
-- by_ad_type counts
-
-Return two things:
-1) JSON (strict, one object; no markdown code fence) with the shape:
-{
-  "by_assignee": {
-    "<assignee_name>": {
-      "drafting_tasks": 0,
-      "planning_tasks": 0,
-      "drafting_minutes": 0,
-      "total_minutes": 0,
-      "by_ad_type": {"Article": 0, "Mini Article": 0, "Lead Story": 0, "Text Ad": 0, "Social Post": 0, "Instagram Story": 0, "Dedicated Email": 0, "Unclear": 0}
-    }
-  },
-  "recommendations": [ "short staffing notes ..." ]
-}
-2) A short 5-8 line narrative summary for a floating copywriter with concrete suggestions on what to take over (who is overloaded).
+Analyze the attached file.
+Treat “Preview Link sent”, “send to client”, and “sent to press” as Publishing.
+If a task title includes both “story” and “lead story”, classify ad_type as Lead Story (not Instagram Story).
 """
 
     thread = client.beta.threads.create()
