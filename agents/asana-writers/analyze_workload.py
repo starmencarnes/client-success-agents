@@ -92,13 +92,30 @@ def main():
 
     # 3) Per-run prompt: ask ONLY for a short, Slack-friendly narrative
     per_run = (
-        "You will receive a JSON array of Asana tasks due next week. "
-        "Apply your System Instructions to classify and estimate effort. "
-        "Return a short Slack-ready memo (no code fences, no citations) with:\n"
-        "• Who is overloaded (by approx minutes) and why\n"
-        "• 3–6 concrete reassignments for the floating writer (task type + due day + from → to)\n"
-        "• Any risks or follow-ups\n"
-        "Keep it under ~12 lines, crisp and actionable."
+        "You will receive a JSON array of tasks. Classify/estimate per your System Instructions, "
+        "aggregate by assignee, then produce ONE Slack-ready message using the exact template.\n\n"
+        "Week: next Monday–Sunday (America/New_York).\n"
+        "Capacity (minutes/week): {\"Dalton Phillips\": 1200, \"Julia Pizzuto\": 1200, \"Michaela Leung\": 1200, "
+        "\"Germaine Foo\": 1200, \"Rachel Taylor-Northam\": 1200, \"Lexa Garian\": 1200, \"Bethany Osborn\": 1200}\n"
+        "Use assignee friendly names if present; otherwise assignee.name; if missing, 'Unassigned'.\n"
+        "Do NOT include code fences, tables, or citations. Keep under ~12–15 lines.\n\n"
+        "Format:\n"
+        "🤝 *Writer Support — Next Week (Mon–Sun)*\n\n"
+        "*Per-assignee summary*\n"
+        "For each assignee, one line:\n"
+        "• *<Name>* — Drafting: *<count>* (<minutes>m) | Editing: *<count>* (<minutes>m) | Publishing: *<count>* (<minutes>m) | Planning: *<count>* (<minutes>m) | *Total:* <total>m / <capacity>m (Load <ratio>x)\n"
+        "  Top types: <type1> <n1>, <type2> <n2>, <type3> <n3>\n\n"
+        "*Overload analysis*\n"
+        "One tight paragraph: who is over capacity, by how much, and why (mention due days if relevant).\n\n"
+        "*Reassignments for Floating Writer (3–6 items)*\n"
+        "1) *<ad_type>* — <short task label> | *Due:* <dow M/D> | *From:* <Owner> → *To:* Floating Writer\n"
+        "2) ... (choose items that reduce the largest deficits first; prefer Drafting > Editing > Publishing > Planning)\n\n"
+        "*Risks / Follow-ups*\n"
+        "• <one-liner risk or dependency>\n"
+        "• <one-liner follow-up>\n\n"
+        "*Notes*\n"
+        "• Treat “Preview Link sent”, “send to client”, and “sent to press” as Publishing (10m).\n"
+        "• If a title includes both “story” and “lead story”, ad_type = Lead Story (not Instagram Story).\n"
     )
 
     # 4) Create thread + attach file
