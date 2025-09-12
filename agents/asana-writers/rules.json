@@ -1,0 +1,84 @@
+[
+  {
+    "ad_type": "Lead Story",
+    "keywords": ["lead story"],
+    "priority": 100,
+    "notes": "Will explicitly say Lead Story",
+    "effort": { "drafting": 150, "editing": 30, "publishing": 30, "planning": 10, "other": 10 }
+  },
+  {
+    "ad_type": "Dedicated Email",
+    "keywords": ["dedicated email", "mini dedicated email","dedicated"],
+    "priority": 90,
+    "notes": "Will explicitly say Dedicated Email or Mini Dedicated",
+    "effort": { "drafting": 150, "editing": 30, "publishing": 30, "planning": 10, "other": 10 }
+  },
+  {
+    "ad_type": "Mini Article",
+    "keywords": ["mini article", " mini "],
+    "priority": 80,
+    "notes": "'mini article' or standalone 'mini'.",
+    "effort": { "drafting": 50, "editing": 10, "publishing": 10, "planning": 10, "other": 5 }
+  },
+  {
+    "ad_type": "Article",
+    "keywords": [" article "],
+    "priority": 70,
+    "notes": "Use only if no 'lead story' or 'mini' matched.",
+    "effort": { "drafting": 95, "editing": 20, "publishing": 20, "planning": 10, "other": 10 }
+  },
+  {
+    "ad_type": "Instagram Story",
+    "keywords": ["ig story", "instagram story","slide"],
+    "priority": 60,
+    "notes": "May be listed as an add-on to another ad type",
+    "effort": { "drafting": 15, "editing": 5, "publishing": 10, "planning": 5, "other": 10 }
+  },
+  {
+    "ad_type": "Social Post",
+    "keywords": ["standaloen","social", "instagram", "facebook", "x post", "ig post"],
+    "priority": 55,
+    "notes": "Covers generic social copy.",
+    "effort": { "drafting": 20, "editing": 5, "publishing": 15, "planning": 5, "other": 10 }
+  },
+  {
+    "ad_type": "Text Ad",
+    "keywords": ["text ad", " ta ", " tas "],
+    "priority": 50,
+    "notes": "'TA'/'TAs' shorthand included.",
+    "effort": { "drafting": 5, "editing": 5, "publishing": 5, "planning": 5, "other": 10 }
+  },
+  {
+    "ad_type": "Engagement Module",
+    "keywords": [" em ", "engagement module"],
+    "priority": 45,
+    "notes": "May co-exist with another ad type; assign Engagement Module is task is explicitly about it",
+    "effort": { "drafting": 30, "editing": 5, "publishing": 10, "planning": 5, "other": 10 }
+  },
+  {
+    "ad_type": "Email Header",
+    "keywords": ["email header", " header"],
+    "priority": 30,
+    "notes": "Explicitly header work.",
+    "effort": { "drafting": 5, "editing": 5, "publishing": 5, "planning": 5, "other": 10 }
+  },
+  {"ad_type": "Experience",
+    "keywords": ["experience"],
+    "priority":40,
+    "notes":"may include social components; default to social when present",
+    "effort": {"drafting": 100, "editing": 20, "publishing": 20, "planning": 20, "other": 10}
+  },
+  {"ad_type": "Giveaway",
+   "keywords": ["giveaway"],
+   "priority":35,
+    "notes":"may include social components; default to social when present",
+    "effort": {"drafting": 60, "editing": 20, "publishing": 60, "planning": 20, "other": 10}
+  }
+  {
+    "ad_type": "Unclear",
+    "keywords": [],
+    "priority": 1,
+    "notes": "Fallback when no keywords match.",
+    "effort": { "drafting": 20, "editing": 15, "publishing": 10, "planning": 15, "other": 10 }
+  }
+]
