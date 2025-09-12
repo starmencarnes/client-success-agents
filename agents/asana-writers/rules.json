@@ -8,7 +8,7 @@
   },
   {
     "ad_type": "Dedicated Email",
-    "keywords": ["dedicated email", "mini dedicated email","dedicated"],
+    "keywords": ["dedicated email", "mini dedicated email"],
     "priority": 90,
     "notes": "Will explicitly say Dedicated Email or Mini Dedicated",
     "effort": { "drafting": 150, "editing": 30, "publishing": 30, "planning": 10, "other": 10 }
@@ -36,7 +36,7 @@
   },
   {
     "ad_type": "Social Post",
-    "keywords": ["standaloen","social", "instagram", "facebook", "x post", "ig post"],
+    "keywords": ["standalone","social", "instagram", "facebook", "x post", "ig post"],
     "priority": 55,
     "notes": "Covers generic social copy.",
     "effort": { "drafting": 20, "editing": 5, "publishing": 15, "planning": 5, "other": 10 }
@@ -73,7 +73,7 @@
    "priority":35,
     "notes":"may include social components; default to social when present",
     "effort": {"drafting": 60, "editing": 20, "publishing": 60, "planning": 20, "other": 10}
-  }
+  },
   {
     "ad_type": "Unclear",
     "keywords": [],
