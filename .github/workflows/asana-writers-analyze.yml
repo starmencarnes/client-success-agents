@@ -31,7 +31,6 @@ jobs:
           pip install openai==1.40.2
 
       - name: Write service account key
-        if: ${{ secrets.SERVICE_ACCOUNT_JSON != '' }}
         env:
           SERVICE_ACCOUNT_JSON: ${{ secrets.SERVICE_ACCOUNT_JSON }}
         run: |
