@@ -1,9 +1,9 @@
 name: Asana Writers Pull
 
 on:
-  workflow_dispatch:        # lets you click "Run workflow" in the Actions tab
+  workflow_dispatch:        # Manual run
   schedule:
-    - cron: "0 21 * * 5"    # optional: Fridays 21:00 UTC (~4pm ET)
+    - cron: "0 21 * * 5"    # Fridays 21:00 UTC (~5pm ET during DST, ~4pm ET standard)
 
 jobs:
   run:
@@ -11,6 +11,7 @@ jobs:
     defaults:
       run:
         working-directory: agents/asana-writers
+
     steps:
       - uses: actions/checkout@v4
 
@@ -24,16 +25,17 @@ jobs:
           python -m venv .venv
           source .venv/bin/activate
           pip install -r requirements.txt
+          # Ensure OpenAI + httpx compatibility in case requirements.txt gets edited later
+          pip install "httpx<0.28" "openai==1.40.2"
 
       - name: Write service account key
         env:
           SERVICE_ACCOUNT_JSON: ${{ secrets.SERVICE_ACCOUNT_JSON }}
         run: |
-          cat > service_account.json <<JSON
-          $SERVICE_ACCOUNT_JSON
-          JSON
+          # Use printf to avoid stray newlines/indentation
+          printf '%s' "$SERVICE_ACCOUNT_JSON" > service_account.json
 
-
+      # --- Pull tasks into Sheet + write JSONL locally ---
       - name: Run pull
         env:
           ASANA_TOKEN: ${{ secrets.ASANA_TOKEN }}
@@ -49,15 +51,20 @@ jobs:
           name: asana-writer-jsonl
           path: agents/asana-writers/*.jsonl
 
-
+      # --- Analyze + write Slack-style narrative into the Sheet ---
       - name: Analyze workload with Assistant
-        working-directory: agents/asana-writers
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_ASSISTANT_ID: ${{ secrets.OPENAI_ASSISTANT_ID }}
           ASANA_GOOGLE_SHEET_ID: ${{ secrets.ASANA_GOOGLE_SHEET_ID }}
         run: |
           source .venv/bin/activate
-          pip install openai==1.40.2  # or your pinned version
           python analyze_workload.py
 
+      - name: Upload analysis artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: asana-writer-analysis
+          path: |
+            agents/asana-writers/assistant_narrative_*.txt
+            agents/asana-writers/*_upload.json
