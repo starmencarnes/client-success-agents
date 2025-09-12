@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       jsonl_path:
-        description: "Optional path to a JSONL file (in repo) to analyze"
+        description: "Optional path to a JSONL file (in repo) to analyze (e.g., data/asana_writer_tasks_sample.jsonl)"
         required: false
         default: ""
 
@@ -30,7 +30,6 @@ jobs:
           pip install -r requirements.txt
           pip install "httpx<0.28" "openai==1.40.2"
 
-
       - name: Write service account key
         env:
           SERVICE_ACCOUNT_JSON: ${{ secrets.SERVICE_ACCOUNT_JSON }}
@@ -43,13 +42,22 @@ jobs:
           ls -la *.jsonl || true
           ls -la data || true
           ls -la output || true
+          test -f prompt.txt && echo "Found prompt.txt" || echo "prompt.txt missing"
+          test -f rules.json && echo "Found rules.json" || echo "rules.json missing"
 
       - name: Run analyzer
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_ASSISTANT_ID: ${{ secrets.OPENAI_ASSISTANT_ID }}
           ASANA_GOOGLE_SHEET_ID: ${{ secrets.ASANA_GOOGLE_SHEET_ID }}
           ANALYZE_JSONL_PATH: ${{ github.event.inputs.jsonl_path }}
+          # Optional tuning:
+          OPENAI_MODEL: gpt-4o-mini
+          WRITER_CAPACITY_JSON: |
+            {"Dalton Phillips":1440,"Julia Pizzuto":1440,"Michaela Leung":1440,
+             "Germaine Foo":1440,"Rachel Taylor-Northam":1440,"Lexa Garian":1440,"Bethany Osborn":1440}
+          INCLUDE_HUB_PARENTS: "false"
+          PROMPT_PATH: agents/asana-writers/prompt.txt
+          RULES_JSON_PATH: agents/asana-writers/rules.json
         run: |
           source .venv/bin/activate
           python analyze_workload.py
@@ -61,4 +69,3 @@ jobs:
           path: |
             agents/asana-writers/assistant_narrative_*.txt
             agents/asana-writers/*_upload.json
-
