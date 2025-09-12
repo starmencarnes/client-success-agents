@@ -23,19 +23,13 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install deps (force correct OpenAI SDK)
+      - name: Install deps
         run: |
           python -m venv .venv
-              source .venv/bin/activate
-              pip uninstall -y openai || true
-              pip install --no-cache-dir -r requirements.txt
-              pip install --no-cache-dir --upgrade --force-reinstall "httpx<0.28" "openai==1.51.0"
-              python - <<'PY'
-              import sys, openai
-              print("python:", sys.version)
-              print("openai version:", openai.__version__)
-              # don't instantiate OpenAI here (no API key yet)
-              PY
+          source .venv/bin/activate
+          pip install --no-cache-dir -r requirements.txt
+          # quick one-liner check (no heredoc)
+          python -c 'import openai,sys; print("python:", sys.version); print("openai:", openai.__version__)'
 
       - name: Write service account key
         env:
@@ -57,7 +51,6 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ASANA_GOOGLE_SHEET_ID: ${{ secrets.ASANA_GOOGLE_SHEET_ID }}
           ANALYZE_JSONL_PATH: ${{ github.event.inputs.jsonl_path }}
-          # Optional tuning:
           OPENAI_MODEL: gpt-4o-mini
           WRITER_CAPACITY_JSON: |
             {"Dalton Phillips":1200,"Julia Pizzuto":1200,"Michaela Leung":1200,
@@ -67,12 +60,6 @@ jobs:
           RULES_JSON_PATH: agents/asana-writers/rules.json
         run: |
           source .venv/bin/activate
-          python - <<'PY'
-          import openai
-          from openai import OpenAI
-          c = OpenAI()  # API key comes from env in this step
-          print("OpenAI SDK at runtime:", openai.__version__, "responses?", hasattr(c, "responses"))
-          PY
           python analyze_workload.py
 
       - name: Upload analysis artifacts
