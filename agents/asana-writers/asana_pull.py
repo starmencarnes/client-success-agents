@@ -238,7 +238,7 @@ def save_jsonl(tasks: List[Dict[str, Any]], path: str):
 if __name__ == "__main__":
     # basic sanity
     if not ASANA_TOKEN or not ASANA_WORKSPACE_GID or not GOOGLE_SHEET_ID:
-        raise SystemExit("Missing ASANA_TOKEN, ASANA_WORKSPACE_GID, or GOOGLE_SHEET_ID in .env")
+        raise SystemExit("Missing ASANA_TOKEN, ASANA_WORKSPACE_GID, or ASANA_GOOGLE_SHEET_ID in .env")
 
     tasks = pull_writer_tasks_next_week()
 
