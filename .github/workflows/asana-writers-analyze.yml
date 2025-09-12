@@ -27,8 +27,20 @@ jobs:
         run: |
           python -m venv .venv
           source .venv/bin/activate
-          pip install -r requirements.txt
-          pip install "httpx<0.28" "openai==1.40.2"
+          # nuke any preinstalled openai
+          pip uninstall -y openai || true
+          pip install --no-cache-dir -r requirements.txt
+          pip install --no-cache-dir "httpx<0.28" "openai==1.40.2"
+          # verify what actually got installed
+          python - <<'PY'
+          import sys
+          import pkgutil
+          import openai
+          from openai import OpenAI
+          print("python:", sys.version)
+          print("openai version:", openai.__version__)
+          print("has Responses API:", hasattr(OpenAI(), "responses"))
+          PY
 
       - name: Write service account key
         env:
