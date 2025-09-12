@@ -59,5 +59,6 @@ jobs:
         with:
           name: asana-writer-analysis
           path: |
-            agents/asana-writers/assistant_output_*.txt
-            agents/asana-writers/writer_workload_summary_*.json
+            agents/asana-writers/assistant_narrative_*.txt
+            agents/asana-writers/*_upload.json
+
