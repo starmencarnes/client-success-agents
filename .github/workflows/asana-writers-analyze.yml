@@ -1,4 +1,4 @@
-name: Asana Writers — Analyze Only
+name: "Asana Writers — Analyze Only"
 
 on:
   workflow_dispatch:
@@ -31,12 +31,12 @@ jobs:
           pip install --no-cache-dir -r requirements.txt
           pip install --no-cache-dir "httpx<0.28" "openai==1.40.2"
           python - <<'PY'
-import sys, openai
-from openai import OpenAI
-print("python:", sys.version)
-print("openai version:", openai.__version__)
-print("has Responses API:", hasattr(OpenAI(), "responses"))
-PY
+          import sys, openai
+          from openai import OpenAI
+          print("python:", sys.version)
+          print("openai version:", openai.__version__)
+          print("has Responses API:", hasattr(OpenAI(), "responses"))
+          PY
 
       - name: Write service account key
         env:
@@ -67,3 +67,18 @@ PY
           PROMPT_PATH: agents/asana-writers/prompt.txt
           RULES_JSON_PATH: agents/asana-writers/rules.json
         run: |
+          source .venv/bin/activate
+          python - <<'PY'
+          import openai
+          from openai import OpenAI
+          print("OpenAI SDK at runtime:", openai.__version__, "responses?", hasattr(OpenAI(), "responses"))
+          PY
+          python analyze_workload.py
+
+      - name: Upload analysis artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: asana-writer-analysis
+          path: |
+            agents/asana-writers/assistant_narrative_*.txt
+            agents/asana-writers/*_upload.json
