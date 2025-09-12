@@ -28,17 +28,14 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install deps (fresh, force correct OpenAI SDK)
+      - name: Install deps
         run: |
           python -m venv .venv
           source .venv/bin/activate
-          python -m pip install --upgrade pip
-          # Install your repo deps first
-          pip install --no-cache-dir -r requirements.txt || true
-          # Hard-pin SDKs we rely on (force reinstall to avoid stale envs)
-          pip install --no-cache-dir --upgrade --force-reinstall "httpx<0.28" "openai>=1.51.0"
-          # Sanity print
-          python -c 'import sys, openai; from openai import OpenAI; c=OpenAI(); print("python:", sys.version); print("openai:", openai.__version__); print("Has responses?", hasattr(c, "responses"))'
+          pip install --upgrade pip
+          pip install --upgrade openai==1.107.2 httpx<0.28
+          pip install -r requirements.txt
+
 
       - name: Write service account key
         env:
