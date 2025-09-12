@@ -14,10 +14,19 @@ ASSISTANT_ID   = os.getenv("OPENAI_ASSISTANT_ID")  # pre-created Assistant
 
 # -------- helpers --------
 def latest_jsonl(pattern="asana_writer_tasks_*.jsonl"):
+    # Allow override via env for testing
+    override = os.getenv("ANALYZE_JSONL_PATH")
+    if override:
+        if not os.path.exists(override):
+            raise SystemExit(f"ANALYZE_JSONL_PATH not found: {override}")
+        return override
+
+    import glob
     files = sorted(glob.glob(pattern))
     if not files:
-        raise SystemExit("No JSONL files found (run the pull step first).")
+        raise SystemExit("No JSONL files found (run the pull step once, or set ANALYZE_JSONL_PATH).")
     return files[-1]
+
 
 def open_sheet(sheet_id: str, tab_name: str):
     scopes = ["https://www.googleapis.com/auth/spreadsheets"]
