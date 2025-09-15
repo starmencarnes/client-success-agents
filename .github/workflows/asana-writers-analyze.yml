@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       jsonl_path:
-        description: "Optional path to a JSONL file (in repo) to analyze (e.g., data/asana_writer_tasks_sample.jsonl)"
+        description: "Optional path to a JSONL file in repo (e.g., data/asana_writer_tasks_sample.jsonl)"
         required: false
         default: ""
 
@@ -14,11 +14,6 @@ jobs:
     defaults:
       run:
         working-directory: agents/asana-writers
-
-    env:
-      PIP_NO_CACHE_DIR: "1"
-      PIP_DISABLE_PIP_VERSION_CHECK: "1"
-      PIP_ROOT_USER_ACTION: "ignore"
 
     steps:
       - uses: actions/checkout@v4
@@ -32,10 +27,8 @@ jobs:
         run: |
           python -m venv .venv
           source .venv/bin/activate
-          pip install --upgrade pip
-          pip install --upgrade openai==1.107.2 httpx<0.28
-          pip install -r requirements.txt
-
+          pip install --no-cache-dir -r requirements.txt
+          python -c 'import sys, openai; print("python:", sys.version); print("openai:", openai.__version__)'
 
       - name: Write service account key
         env:
@@ -55,15 +48,12 @@ jobs:
       - name: Run analyzer
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_ASSISTANT_ID: ${{ secrets.OPENAI_ASSISTANT_ID }}
           ASANA_GOOGLE_SHEET_ID: ${{ secrets.ASANA_GOOGLE_SHEET_ID }}
           ANALYZE_JSONL_PATH: ${{ github.event.inputs.jsonl_path }}
-          OPENAI_MODEL: gpt-4.1-mini     # or gpt-4o-mini / gpt-4.1
-          WRITER_CAPACITY_JSON: |
-            {"Dalton Phillips":1200,"Julia Pizzuto":1200,"Michaela Leung":1200,
-             "Germaine Foo":1200,"Rachel Taylor-Northam":1200,"Lexa Garian":1200,"Bethany Osborn":1200}
-          INCLUDE_HUB_PARENTS: "false"
           PROMPT_PATH: agents/asana-writers/prompt.txt
           RULES_JSON_PATH: agents/asana-writers/rules.json
+          INCLUDE_HUB_PARENTS: "false"
         run: |
           source .venv/bin/activate
           python analyze_workload.py
