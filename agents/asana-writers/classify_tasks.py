@@ -1,197 +1,184 @@
-#!/usr/bin/env python3
-import os
-import json
-import time
-import glob
-import datetime as dt
-from pathlib import Path
+import os, json, time, datetime as dt, pathlib, glob
+from typing import Any, Dict, List, Tuple
 from openai import OpenAI
 
-# -------- Config / env --------
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+# --------- ENV ---------
+OPENAI_API_KEY         = os.getenv("OPENAI_API_KEY")
+# Prefer dedicated classifier id, fall back to the old single-assistant id
 CLASSIFIER_ASSISTANT_ID = os.getenv("OPENAI_CLASSIFIER_ID") or os.getenv("OPENAI_ASSISTANT_ID")
-PROMPT_PATH = os.getenv("PROMPT_PATH", "prompt.txt")          # optional (you can keep all rules in the assistant)
-RULES_JSON_PATH = os.getenv("RULES_JSON_PATH", "rules.json")   # optional (if you embed rules via content)
-INCLUDE_HUB_PARENTS = os.getenv("INCLUDE_HUB_PARENTS", "false").lower() == "true"
 
-# I/O locations
-DATA_DIR = Path(__file__).parent / "data"
-OUT_DIR = Path(__file__).parent / "output"
-OUT_DIR.mkdir(exist_ok=True)
+PROMPT_PATH       = os.getenv("PROMPT_PATH", "prompt.txt")          # optional; assistant may already have system instructions
+RULES_JSON_PATH   = os.getenv("RULES_JSON_PATH", "rules.json")      # optional helper hints
+ANALYZE_JSONL_PATH = os.getenv("ANALYZE_JSONL_PATH", "data/asana_writer_tasks_sample.jsonl")
 
+OUTPUT_DIR = "output"
+BATCH_SIZE = int(os.getenv("CLASSIFY_BATCH_SIZE", "80"))
+RUN_TIMEOUT_SECS = int(os.getenv("CLASSIFY_RUN_TIMEOUT_SECS", "600"))  # 10 minutes per batch
+POLL_SLEEP = 1.2
 
-# -------- Helpers --------
-def latest_jsonl(pattern="data/asana_writer_tasks_*.jsonl") -> str:
-    """Return override path (ANALYZE_JSONL_PATH) or the newest JSONL under data/."""
-    override = os.getenv("ANALYZE_JSONL_PATH", "").strip()
-    if override:
-        if not os.path.exists(override):
-            raise SystemExit(f"ANALYZE_JSONL_PATH not found: {override}")
-        return override
-    files = sorted(glob.glob(pattern))
-    if not files:
-        raise SystemExit("No JSONL files found (set ANALYZE_JSONL_PATH or place a file under data/).")
-    return files[-1]
+# --------- Helpers ---------
+def ensure_output_dir() -> str:
+    pathlib.Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
+    return OUTPUT_DIR
 
-
-def is_hub_parent(name: str) -> bool:
-    """
-    Light heuristic to skip top-level container rows like:
-      '<Client> | <Thing> runs <date> | <EDITION>' or '... posted ... | <EDITION>'
-    """
-    n = (name or "")
-    low = n.lower()
-    bars = "|" in n
-    has_runs_or_posted = (" runs " in low) or (" posted " in low)
-    actionable_prefix = low.startswith(("writer:", "editor:", "ready", "published", "planner:", "planning:", "preview link", "send to client"))
-    return bars and has_runs_or_posted and not actionable_prefix
-
-
-def jsonl_to_json_file(jsonl_path: str) -> str:
-    """Convert JSONL to a single JSON array, pruning hub parents unless opted in."""
-    out_path = os.path.splitext(jsonl_path)[0] + "_upload.json"
-    objs, skipped = [], 0
-    with open(jsonl_path, "r", encoding="utf-8") as f:
+def load_jsonl(path: str) -> List[Dict[str, Any]]:
+    if not os.path.exists(path):
+        raise SystemExit(f"ANALYZE_JSONL_PATH not found: {path}")
+    out: List[Dict[str, Any]] = []
+    with open(path, "r", encoding="utf-8") as f:
         for line in f:
             s = line.strip()
             if not s:
                 continue
-            obj = json.loads(s)
-            if not INCLUDE_HUB_PARENTS and is_hub_parent(obj.get("name", "")):
-                skipped += 1
-                continue
-            objs.append(obj)
+            try:
+                out.append(json.loads(s))
+            except Exception:
+                # keep moving; but log? we'll just skip malformed lines
+                pass
+    if not out:
+        raise SystemExit(f"No tasks found in {path}")
+    return out
 
-    with open(out_path, "w", encoding="utf-8") as w:
-        json.dump(objs, w, ensure_ascii=False)
-    print(f"Prepared upload JSON with {len(objs)} tasks (skipped {skipped} hub parents).")
-    return out_path
+def chunked(xs: List[Any], n: int) -> List[List[Any]]:
+    return [xs[i:i+n] for i in range(0, len(xs), n)]
 
+def read_or_default(path: str, default: str = "") -> str:
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError:
+        return default
 
-def load_text(path: str) -> str:
-    with open(path, "r", encoding="utf-8") as f:
-        return f.read()
+def poll_run(client: OpenAI, thread_id: str, run_id: str, timeout_s: int) -> str:
+    t0 = time.time()
+    while True:
+        run = client.beta.threads.runs.retrieve(thread_id=thread_id, run_id=run_id)
+        if run.status in ("completed", "failed", "cancelled", "expired"):
+            return run.status
+        if time.time() - t0 > timeout_s:
+            return "timeout"
+        time.sleep(POLL_SLEEP)
 
+def collect_assistant_text(client: OpenAI, thread_id: str) -> str:
+    msgs = client.beta.threads.messages.list(thread_id=thread_id, order="desc", limit=10)
+    parts = []
+    for m in msgs.data:
+        if m.role == "assistant":
+            for c in m.content:
+                if c.type == "text" and c.text and c.text.value:
+                    parts.append(c.text.value)
+    # messages were requested newest-first; preserve chronological order
+    return "\n".join(reversed(parts)).strip()
 
-def save_debug_blob(prefix: str, content: str) -> str:
-    ts = dt.datetime.utcnow().strftime("%Y-%m-%dT%H-%M-%S")
-    path = OUT_DIR / f"{prefix}_{ts}.txt"
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(content or "")
-    print(f"[debug] saved assistant raw to {path}")
-    return str(path)
+def classify_batch(
+    client: OpenAI,
+    assistant_id: str,
+    batch_tasks: List[Dict[str, Any]],
+    rules_text: str,
+    prompt_text: str,
+    batch_index: int
+) -> Tuple[List[Dict[str, Any]], str]:
+    """
+    Runs one Assistant classification batch.
+    Returns (task_list, raw_text)
+    """
+    # Prepare a small upload file for this batch
+    stamp = dt.datetime.utcnow().strftime("%Y-%m-%dT%H-%M-%S")
+    tmp_json_path = os.path.join(OUTPUT_DIR, f"tasks_batch_{batch_index:02d}_{stamp}_upload.json")
+    with open(tmp_json_path, "w", encoding="utf-8") as w:
+        json.dump(batch_tasks, w, ensure_ascii=False)
 
+    file_obj = client.files.create(file=open(tmp_json_path, "rb"), purpose="assistants")
 
-def save_json(prefix: str, obj) -> str:
-    ts = dt.datetime.utcnow().strftime("%Y-%m-%dT%H-%M-%S")
-    path = OUT_DIR / f"{prefix}_{ts}.json"
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(obj, f, ensure_ascii=False, indent=2)
-    print(f"[debug] saved JSON to {path}")
-    return str(path)
-
-
-# -------- Main --------
-def main():
-    if not OPENAI_API_KEY or not CLASSIFIER_ASSISTANT_ID:
-        raise SystemExit("Missing OPENAI_API_KEY or OPENAI_CLASSIFIER_ASSISTANT_ID (or OPENAI_ASSISTANT_ID).")
-
-    # Input prep
-    jsonl_path = latest_jsonl("data/asana_writer_tasks_*.jsonl")
-    print(f"Using file: {jsonl_path}")
-    upload_path = jsonl_to_json_file(jsonl_path)
-
-    # Optional prompt/rules—if you want to keep logic in code rather than the Assistant
-    prompt_text = None
-    if os.path.exists(PROMPT_PATH):
-        prompt_text = load_text(PROMPT_PATH)
-        print(f"Loaded prompt from {PROMPT_PATH}")
-    rules_json = None
-    if os.path.exists(RULES_JSON_PATH):
-        rules_json = load_text(RULES_JSON_PATH)
-        print(f"Attached rules from {os.path.abspath(RULES_JSON_PATH)}")
-
-    client = OpenAI(api_key=OPENAI_API_KEY)
-
-    # Upload compact JSON as a file for the Assistant
-    file_obj = client.files.create(file=open(upload_path, "rb"), purpose="assistants")
-
-    # Create thread and send user message with the attachment + optional rules
+    # Create thread + message with file_search tool attachment
     thread = client.beta.threads.create()
-    user_content = "Classify the attached tasks and return strict JSON."
-    if rules_json:
-        user_content += "\n\nRULES JSON (authoritative for ad type & effort):\n" + rules_json
-
+    user_msg = (
+        "Classify the attached tasks JSON. "
+        "Return a single JSON object with a top-level key 'tasks', where each item contains:\n"
+        "  name, ad_type, effort (with minutes per category or a single chosen minutes), "
+        "  assignee, due_on, and permalink_url.\n"
+        "Use the decision rules below as authoritative for ad_type and effort.\n\n"
+        f"RULES JSON:\n{rules_text}\n"
+    )
     client.beta.threads.messages.create(
         thread_id=thread.id,
         role="user",
-        content=user_content,
+        content=user_msg,
         attachments=[{"file_id": file_obj.id, "tools": [{"type": "file_search"}]}],
     )
 
-    # Launch the run (optionally pass extra instructions from prompt.txt)
+    # Kick the run; enforce JSON
     run = client.beta.threads.runs.create(
         thread_id=thread.id,
-        assistant_id=CLASSIFIER_ASSISTANT_ID,
-        instructions=prompt_text or None,
-        # response_format={"type": "json_object"}  # Assistants API may not support this flag yet everywhere
+        assistant_id=assistant_id,
+        instructions=prompt_text or "Classify the tasks and return JSON only.",
+        response_format={"type": "json_object"},
     )
 
-    # Poll to completion
-    while True:
-        r = client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
-        if r.status in ("completed", "failed", "cancelled", "expired"):
-            break
-        time.sleep(1.2)
+    status = poll_run(client, thread.id, run.id, RUN_TIMEOUT_SECS)
+    raw_text = collect_assistant_text(client, thread.id) if status == "completed" else f"(status={status})"
 
-    print(f"[debug] run status = {r.status}")
-    if getattr(r, "last_error", None):
-        print("[debug] last_error:", r.last_error)
+    # Save raw for debugging
+    raw_path = os.path.join(OUTPUT_DIR, f"classify_batch_{batch_index:02d}_{stamp}.txt")
+    with open(raw_path, "w", encoding="utf-8") as f:
+        f.write(raw_text or "")
 
-    if r.status != "completed":
-        # Try to dump step errors for more context
+    # Parse JSON if we got it
+    tasks_out: List[Dict[str, Any]] = []
+    if status == "completed" and raw_text:
         try:
-            steps = client.beta.threads.runs.steps.list(thread_id=thread.id, run_id=run.id)
-            for st in steps.data:
-                print(f"[debug] step: {st.type} status={st.status}")
-                if getattr(st, "last_error", None):
-                    print("        last_error:", st.last_error)
+            obj = json.loads(raw_text)
+            items = obj.get("tasks", [])
+            if isinstance(items, list):
+                tasks_out = items
         except Exception:
+            # leave empty; caller will see counts in summary
             pass
-        raise SystemExit(f"Assistant run did not complete: status={r.status}")
 
-    # Collect assistant text content
-    msgs = client.beta.threads.messages.list(thread_id=thread.id, order="desc", limit=10)
-    parts = []
-    for m in msgs.data:
-        if m.role != "assistant":
-            continue
-        for c in m.content:
-            if c.type == "text" and getattr(c.text, "value", ""):
-                parts.append(c.text.value)
-            elif c.type != "text":
-                # Helpful to see if we accidentally received non-text tool output
-                print(f"[debug] assistant non-text content type: {c.type}")
+    return tasks_out, raw_path
 
-    assistant_text = "\n".join(reversed(parts)).strip()
-    raw_path = save_debug_blob("assistant_raw", assistant_text)
+# --------- Main ---------
+def main():
+    if not OPENAI_API_KEY or not CLASSIFIER_ASSISTANT_ID:
+        raise SystemExit("Missing OPENAI_API_KEY or OPENAI_CLASSIFIER_ASSISTANT_ID/OPENAI_ASSISTANT_ID.")
 
-    # Try to parse JSON; if it fails, save an error JSON to keep pipeline alive
-    try:
-        classified = json.loads(assistant_text)
-    except Exception as e:
-        print("[error] JSON parse failed:", repr(e))
-        print("[error] First 300 chars of assistant output:")
-        print(assistant_text[:300])
-        classified = {
-            "error": "invalid_json",
-            "message": str(e),
-            "raw_file": raw_path
-        }
+    ensure_output_dir()
 
-    out_path = save_json("classified_tasks", classified)
-    print("Done. Classified tasks written to:", out_path)
+    tasks = load_jsonl(ANALYZE_JSONL_PATH)
+    prompt_text = read_or_default(PROMPT_PATH, "")
+    rules_text  = read_or_default(RULES_JSON_PATH, "")
 
+    client = OpenAI(api_key=OPENAI_API_KEY)
+
+    batches = chunked(tasks, BATCH_SIZE)
+    print(f"Classifying {len(tasks)} tasks in {len(batches)} batch(es) of up to {BATCH_SIZE} each...")
+
+    all_classified: List[Dict[str, Any]] = []
+    debug_files: List[str] = []
+    for i, batch in enumerate(batches, start=1):
+        classified, raw_file = classify_batch(
+            client=client,
+            assistant_id=CLASSIFIER_ASSISTANT_ID,
+            batch_tasks=batch,
+            rules_text=rules_text,
+            prompt_text=prompt_text,
+            batch_index=i
+        )
+        debug_files.append(raw_file)
+        print(f"Batch {i}: received {len(classified)} classified items")
+        all_classified.extend(classified)
+
+    stamp = dt.datetime.utcnow().strftime("%Y-%m-%dT%H-%M-%S")
+    out_path = os.path.join(OUTPUT_DIR, f"classified_tasks_{stamp}.json")
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump({"tasks": all_classified}, f, ensure_ascii=False, indent=2)
+
+    # Short summary for the workflow log
+    print("----- Classification summary -----")
+    print(f"Input tasks:    {len(tasks)}")
+    print(f"Classified:     {len(all_classified)}")
+    print(f"Raw logs:       {', '.join(os.path.basename(p) for p in debug_files)}")
+    print(f"Output JSON:    {out_path}")
 
 if __name__ == "__main__":
     main()
