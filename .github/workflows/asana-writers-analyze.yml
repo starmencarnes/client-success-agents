@@ -6,7 +6,7 @@ on:
       jsonl_path:
         description: "Optional path to a JSONL file to analyze"
         required: false
-        default: "agents/asana-writers/data/asana_writer_tasks_sample.jsonl"
+        default: "data/asana_writer_tasks_sample.jsonl"
 
 jobs:
   analyze:
