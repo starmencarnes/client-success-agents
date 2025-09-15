@@ -18,7 +18,7 @@ ASANA_TOKEN = os.getenv("ASANA_TOKEN")  # Personal Access Token
 ASANA_WORKSPACE_GID = os.getenv("ASANA_WORKSPACE_GID")  # e.g. "1234567890"
 GOOGLE_SHEET_ID = os.getenv("ASANA_GOOGLE_SHEET_ID")  # The spreadsheet ID (not the name)
 
-SHEET_NAME = "Next Week Writer Tasks"
+SHEET_NAME = "This Week Writer Tasks"
 ASSIGNEE_GIDS: Dict[str, str] = {
     "Dalton Phillips": "1205690156575999",
     "Julia Pizzuto": "1209238639668940",
@@ -56,14 +56,17 @@ logging.basicConfig(
 )
 
 # ------------- DATE HELPERS -------------
-def next_week_bounds(tz: dt.tzinfo = dt.timezone.utc) -> (dt.date, dt.date):
-    """Return next week's Monday..Sunday as dates."""
+
+def week_bounds(offset_weeks: int = 0, tz: dt.tzinfo = dt.timezone.utc) -> tuple[dt.date, dt.date]:
+    """Return Monday..Sunday for the week offset from the current week.
+    offset_weeks=0 → this week, 1 → next week, -1 → last week."""
     today = dt.datetime.now(tz).date()
-    dow = today.weekday()  # 0=Mon
+    dow = today.weekday()               # 0 = Monday
     monday_this = today - dt.timedelta(days=dow)
-    monday_next = monday_this + dt.timedelta(days=7)
-    sunday_next = monday_next + dt.timedelta(days=6)
-    return monday_next, sunday_next
+    monday = monday_this + dt.timedelta(weeks=offset_weeks)
+    sunday = monday + dt.timedelta(days=6)
+    return monday, sunday
+
 
 def daterange(start_date: dt.date, end_date: dt.date):
     d = start_date
@@ -166,7 +169,7 @@ def fetch_tasks_for_day(
 
 # ------------- MAIN PULL -------------
 def pull_writer_tasks_next_week() -> List[Dict[str, Any]]:
-    monday, sunday = next_week_bounds()
+    monday, sunday = week_bounds(0)
     results: List[Dict[str, Any]] = []
 
     for d in daterange(monday, sunday):
@@ -202,7 +205,7 @@ def write_to_sheet(rows: List[List[Any]]):
     header = [
         "Task Name", "Assignee", "Due Date", "Completed",
         "Project(s)", "Parent Task", "Task GID", "Task URL",
-        "Is Subtask", "Assignee GID", "Assignee (Friendly)"
+        "Assignee GID", "Assignee (Friendly)"
     ]
     ws.append_row(header)
 
@@ -221,7 +224,6 @@ def format_rows(tasks: List[Dict[str, Any]]) -> List[List[Any]]:
         parent_name = ((t.get("parent") or {}).get("name") or "")
         gid = t.get("gid") or ""
         url = t.get("permalink_url") or ""
-        is_subtask = bool(t.get("is_subtask"))
         friendly = t.get("_assignee_friendly") or ""
         out.append([
             name, assignee_name, due_on, completed, projects, parent_name, gid, url, is_subtask, assignee_gid, friendly
