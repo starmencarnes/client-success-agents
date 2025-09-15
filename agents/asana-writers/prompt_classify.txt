@@ -1,0 +1,45 @@
+You are a classification assistant. I’ll attach:
+1) A JSON file with an array of Asana tasks (one object per task).
+2) rules.json that defines ad-type keywords and default effort minutes.
+
+Goal
+For each task, decide:
+- category: Drafting | Editing | Publishing | Planning | Other
+- ad_type: one of the ad types in rules.json (fall back to "Unclear")
+- effort_minutes: integer (choose ONE total effort per task using category + ad_type + rules.json)
+
+Decision rules
+1) Category (decide from task name first; if unclear, use notes; else parent.name):
+- Drafting: draft, drafted, writing, write, compose, build copy, outline, create copy, first pass
+- Editing: edit, edited, edits, copyedit, proof, revision after edit
+- Publishing: publish, published, schedule, scheduled, post live, preview link sent, send to client, sent to press
+- Planning: plan, planning, brief, kickoff, gather assets, build timeline/timeline, gather results, create highlights, dependencies, coordination
+If none match → Other.
+
+2) Ignore hub/container parents:
+Skip top-level “anchor” tasks that look like: "<Client> | <Thing> runs <date> | <EDITION>" or "... posted ... | <EDITION>" unless the title itself is actionable (e.g., starts with "Writer:", "Editor:", "Published", "Preview Link", etc.). Subtasks under them are actionable and should be included.
+
+3) Ad type:
+Prefer parent.name → task name → projects[].name → notes.
+Use rules.json keyword lists and priority. "lead story" beats "article"; "mini" beats "article"; “story” should NOT override “lead story”.
+
+4) Effort minutes:
+Pick one number per task. If category = Drafting, use drafting effort from rules.json for the matched ad_type; if Editing/Publishing/Planning/Other, use those efforts from rules.json for the matched ad_type. If no ad_type match, use "Unclear" row’s efforts.
+
+Output (strict JSON)
+Return a single JSON object:
+{
+  "meta": { "week_start": "...", "week_end": "...", "generated_at": "..." },
+  "tasks": [
+    {
+      "gid": "...", "name": "...", "assignee_name": "...", "assignee_gid": "...",
+      "due_on": "YYYY-MM-DD", "projects": ["..."], "parent_name": "...", "is_subtask": true,
+      "url": "...",
+      "category": "Drafting|Editing|Publishing|Planning|Other",
+      "ad_type": "Article|Mini Article|Lead Story|Text Ad|Social Post|Instagram Story|Dedicated Email|Engagement Module|Email Header|Unclear",
+      "effort_minutes": 90,
+      "explain": "short reason"
+    }
+  ]
+}
+No markdown. If you skip hub/anchor parents, do not include them in the output.
