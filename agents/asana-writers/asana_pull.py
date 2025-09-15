@@ -226,7 +226,7 @@ def format_rows(tasks: List[Dict[str, Any]]) -> List[List[Any]]:
         url = t.get("permalink_url") or ""
         friendly = t.get("_assignee_friendly") or ""
         out.append([
-            name, assignee_name, due_on, completed, projects, parent_name, gid, url, is_subtask, assignee_gid, friendly
+            name, assignee_name, due_on, completed, projects, parent_name, gid, url, assignee_gid, friendly
         ])
     return out
 
