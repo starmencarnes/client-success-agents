@@ -51,8 +51,8 @@ jobs:
           OPENAI_ASSISTANT_ID: ${{ secrets.OPENAI_ASSISTANT_ID }}
           ASANA_GOOGLE_SHEET_ID: ${{ secrets.ASANA_GOOGLE_SHEET_ID }}
           ANALYZE_JSONL_PATH: ${{ github.event.inputs.jsonl_path }}
-          PROMPT_PATH: agents/asana-writers/prompt.txt
-          RULES_JSON_PATH: agents/asana-writers/rules.json
+          PROMPT_PATH: prompt.txt
+          RULES_JSON_PATH: rules.json
           INCLUDE_HUB_PARENTS: "false"
         run: |
           source .venv/bin/activate
