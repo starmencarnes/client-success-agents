@@ -18,7 +18,7 @@ ASANA_TOKEN = os.getenv("ASANA_TOKEN")  # Personal Access Token
 ASANA_WORKSPACE_GID = os.getenv("ASANA_WORKSPACE_GID")  # e.g. "1234567890"
 GOOGLE_SHEET_ID = os.getenv("ASANA_GOOGLE_SHEET_ID")  # The spreadsheet ID (not the name)
 
-SHEET_NAME = "This Week Writer Tasks"
+SHEET_NAME = "This Week's Writer Tasks"
 ASSIGNEE_GIDS: Dict[str, str] = {
     "Dalton Phillips": "1205690156575999",
     "Julia Pizzuto": "1209238639668940",
