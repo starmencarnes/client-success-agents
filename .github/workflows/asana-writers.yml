@@ -50,21 +50,3 @@ jobs:
         with:
           name: asana-writer-jsonl
           path: agents/asana-writers/*.jsonl
-
-      # --- Analyze + write Slack-style narrative into the Sheet ---
-      - name: Analyze workload with Assistant
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_ASSISTANT_ID: ${{ secrets.OPENAI_ASSISTANT_ID }}
-          ASANA_GOOGLE_SHEET_ID: ${{ secrets.ASANA_GOOGLE_SHEET_ID }}
-        run: |
-          source .venv/bin/activate
-          python analyze_workload.py
-
-      - name: Upload analysis artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: asana-writer-analysis
-          path: |
-            agents/asana-writers/assistant_narrative_*.txt
-            agents/asana-writers/*_upload.json
