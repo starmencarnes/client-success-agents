@@ -1,12 +1,12 @@
-name: "Asana Writers — Analyze Only"
+name: Asana Writers — Analyze Only
 
 on:
   workflow_dispatch:
     inputs:
       jsonl_path:
-        description: "Optional path to a JSONL file in repo (e.g., data/asana_writer_tasks_sample.jsonl)"
+        description: "Optional path to a JSONL file to analyze"
         required: false
-        default: ""
+        default: "agents/asana-writers/data/asana_writer_tasks_sample.jsonl"
 
 jobs:
   analyze:
@@ -14,7 +14,6 @@ jobs:
     defaults:
       run:
         working-directory: agents/asana-writers
-
     steps:
       - uses: actions/checkout@v4
 
@@ -27,8 +26,7 @@ jobs:
         run: |
           python -m venv .venv
           source .venv/bin/activate
-          pip install --no-cache-dir -r requirements.txt
-          python -c 'import sys, openai; print("python:", sys.version); print("openai:", openai.__version__)'
+          pip install -r requirements.txt
 
       - name: Write service account key
         env:
@@ -36,32 +34,28 @@ jobs:
         run: |
           printf '%s' "$SERVICE_ACCOUNT_JSON" > service_account.json
 
-      - name: Show candidate JSONL files (debug)
-        run: |
-          ls -la
-          ls -la *.jsonl || true
-          ls -la data || true
-          ls -la output || true
-          test -f prompt.txt && echo "Found prompt.txt" || echo "prompt.txt missing"
-          test -f rules.json && echo "Found rules.json" || echo "rules.json missing"
-
-      - name: Run analyzer
+      - name: Classify tasks
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_ASSISTANT_ID: ${{ secrets.OPENAI_ASSISTANT_ID }}
-          ASANA_GOOGLE_SHEET_ID: ${{ secrets.ASANA_GOOGLE_SHEET_ID }}
+          OPENAI_CLASSIFIER_ID: ${{ secrets.OPENAI_CLASSIFIER_ID }}
           ANALYZE_JSONL_PATH: ${{ github.event.inputs.jsonl_path }}
-          PROMPT_PATH: prompt.txt
-          RULES_JSON_PATH: rules.json
-          INCLUDE_HUB_PARENTS: "false"
         run: |
           source .venv/bin/activate
-          python analyze_workload.py
+          python classify_tasks.py
 
-      - name: Upload analysis artifacts
+      - name: Summarize workload
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_SUMMARIZER_ID: ${{ secrets.OPENAI_SUMMARIZER_ID }}
+          ASANA_GOOGLE_SHEET_ID: ${{ secrets.ASANA_GOOGLE_SHEET_ID }}
+          # Optional: {"Name": minutes, ...}
+          CAPACITY_JSON: '{"Dalton Phillips":1200,"Julia Pizzuto":1200,"Michaela Leung":1200,"Germaine Foo":1200,"Rachel Taylor-Northam":1200,"Lexa Garian":1200,"Bethany Osborn":1200}'
+        run: |
+          source .venv/bin/activate
+          python summarize_workload.py
+
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: asana-writer-analysis
-          path: |
-            agents/asana-writers/assistant_narrative_*.txt
-            agents/asana-writers/*_upload.json
+          name: asana-writer-outputs
+          path: agents/asana-writers/output/*
