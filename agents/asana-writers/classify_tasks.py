@@ -9,7 +9,7 @@ from openai import OpenAI
 
 # -------- Config / env --------
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-CLASSIFIER_ASSISTANT_ID = os.getenv("OPENAI_CLASSIFIER_ASSISTANT_ID") or os.getenv("OPENAI_ASSISTANT_ID")
+CLASSIFIER_ASSISTANT_ID = os.getenv("OPENAI_CLASSIFIER_ID") or os.getenv("OPENAI_ASSISTANT_ID")
 PROMPT_PATH = os.getenv("PROMPT_PATH", "prompt.txt")          # optional (you can keep all rules in the assistant)
 RULES_JSON_PATH = os.getenv("RULES_JSON_PATH", "rules.json")   # optional (if you embed rules via content)
 INCLUDE_HUB_PARENTS = os.getenv("INCLUDE_HUB_PARENTS", "false").lower() == "true"
