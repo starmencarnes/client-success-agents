@@ -43,6 +43,16 @@ jobs:
           source .venv/bin/activate
           python classify_tasks.py
 
+      - name: Upload debug/artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: asana-writer-debug
+          path: |
+            agents/asana-writers/output/*.txt
+            agents/asana-writers/*.json
+            agents/asana-writers/*_upload.json
+
+
       - name: Summarize workload
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
