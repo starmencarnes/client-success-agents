@@ -3,7 +3,7 @@ name: Asana Writers Pull
 on:
   workflow_dispatch:        # Manual run
   schedule:
-    - cron: "0 21 * * 5"    # Fridays 21:00 UTC (~5pm ET during DST, ~4pm ET standard)
+    - cron: "0 12 * * 1"    # Fridays 21:00 UTC (~5pm ET during DST, ~4pm ET standard)
 
 jobs:
   run:
